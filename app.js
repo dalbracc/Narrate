@@ -24,7 +24,8 @@ const VOICES = [
 ];
 const voiceName = (id) => (VOICES.find((v) => v[0] === id) || [id, id])[1];
 
-const CLOTHS = ['#2e4f4a', '#5b2e35', '#2d3e5c', '#4a5530', '#5a4632', '#40324f', '#24453f', '#6a3a2a'];
+// Leather bindings: oxblood, forest, tobacco, midnight, plum, saddle, bottle green, burgundy.
+const CLOTHS = ['#6b2a26', '#2f4a33', '#6a4528', '#27324a', '#4e2d40', '#7a4a2a', '#23413a', '#5a2131'];
 const SPEEDS = [0.8, 0.9, 1, 1.1, 1.2, 1.35, 1.5, 1.75, 2];
 const SKIP_TITLES = /^(contents|table of contents|copyright|index|dedication|title page|also by|other books|about the author|about the publisher|cover|half title|praise for|newsletter)/i;
 
@@ -165,7 +166,7 @@ function renderLibrary() {
     stack.append(el('li', {},
       el('button', {
         class: 'spine', type: 'button',
-        style: `--cloth:${book.cloth || CLOTHS[h % CLOTHS.length]};--w:${width}%;--x:${offset}%`,
+        style: `--cloth:${CLOTHS[h % CLOTHS.length]};--w:${width}%;--x:${offset}%`,
         onclick: () => openBook(book.id),
       },
       el('span', { class: 'spine-title' }, book.title),
@@ -696,8 +697,9 @@ function renderPlayer() {
 
 function updatePlayIcon() {
   const playing = !audio.paused;
-  $('icon-play').hidden = playing;
-  $('icon-pause').hidden = !playing;
+  // SVG elements have no .hidden property, so toggle the attribute itself.
+  $('icon-play').toggleAttribute('hidden', playing);
+  $('icon-pause').toggleAttribute('hidden', !playing);
   $('play').setAttribute('aria-label', playing ? 'Pause' : 'Play');
 }
 
@@ -1084,8 +1086,9 @@ function wire() {
   });
   audio.addEventListener('canplay', applyPendingSeek);
   audio.addEventListener('playing', () => { applyPendingSeek(); updatePositionState(true); });
-  audio.addEventListener('play', () => { updatePlayIcon(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
+  audio.addEventListener('play', () => { document.documentElement.classList.add('playing'); updatePlayIcon(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
   audio.addEventListener('pause', () => {
+    document.documentElement.classList.remove('playing');
     updatePlayIcon();
     savePosition(true);
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
