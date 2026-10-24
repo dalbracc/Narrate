@@ -18,25 +18,40 @@ function isAppleMobile() {
   return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (self.navigator.maxTouchPoints || 0) > 1);
 }
 
-async function hasWebGPU() {
+/** Returns the GPU vendor ('nvidia', 'intel', 'amd', 'apple', ...), '' if unknown, or null if no WebGPU. */
+async function gpuVendor() {
   try {
-    if (!self.navigator.gpu) return false;
+    if (!self.navigator.gpu) return null;
     const adapter = await self.navigator.gpu.requestAdapter();
-    return !!adapter;
-  } catch { return false; }
+    if (!adapter) return null;
+    const info = adapter.info || (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : {});
+    return String(info.vendor || info.architecture || '').toLowerCase();
+  } catch { return null; }
+}
+
+// Kokoro output is corrupted on Intel and AMD graphics by an open ONNX Runtime WebGPU bug
+// (microsoft/onnxruntime#29807). It only hits some longer sentences, so a warm-up can miss it.
+const BAD_GPU = /\b(intel|amd|ati)\b|radeon/;
+
+function threadCount() {
+  return self.crossOriginIsolated ? Math.min(4, Math.ceil((self.navigator.hardwareConcurrency || 1) / 2)) : 1;
 }
 
 async function load(mode = 'auto') {
-  // Phones get the small quantised model on CPU: the full-precision GPU model needs ~330 MB
-  // and Safari on iPhone kills tabs that use that much memory.
+  // Phones get the small quantised model: the full-precision one needs ~330 MB and Safari on
+  // iPhone kills tabs that use that much memory. Computers get full precision on the processor
+  // too, which is both the reference quality and faster than the quantised model on a CPU.
+  const cpu = isAppleMobile() ? { device: 'wasm', dtype: 'q8' } : { device: 'wasm', dtype: 'fp32' };
   let plan;
-  if (mode === 'gpu') plan = [{ device: 'webgpu', dtype: 'fp32' }, { device: 'wasm', dtype: 'q8' }];
-  else if (mode === 'cpu') plan = [{ device: 'wasm', dtype: 'q8' }];
-  else if (isAppleMobile() || !(await hasWebGPU())) plan = [{ device: 'wasm', dtype: 'q8' }];
-  else plan = [{ device: 'webgpu', dtype: 'fp32' }, { device: 'wasm', dtype: 'q8' }];
+  if (mode === 'gpu') plan = [{ device: 'webgpu', dtype: 'fp32' }, cpu];
+  else if (mode === 'cpu' || isAppleMobile()) plan = [cpu];
+  else {
+    const vendor = await gpuVendor();
+    plan = vendor === null || BAD_GPU.test(vendor) ? [cpu] : [{ device: 'webgpu', dtype: 'fp32' }, cpu];
+  }
 
   const key = JSON.stringify(plan[0]);
-  if (tts && loadedWith === key) { post({ type: 'ready', ...JSON.parse(key), cached: true }); return; }
+  if (tts && loadedWith === key) { post({ type: 'ready', ...JSON.parse(key), threads: threadCount(), cached: true }); return; }
 
   let lastError;
   for (const opt of plan) {
@@ -59,7 +74,7 @@ async function load(mode = 'auto') {
       const problem = speechProblem(test.audio, test.sampling_rate);
       if (problem) throw new Error(`output was ${problem}, not speech`);
       loadedWith = JSON.stringify(opt);
-      post({ type: 'ready', ...opt });
+      post({ type: 'ready', ...opt, threads: opt.device === 'wasm' ? threadCount() : 0 });
       return;
     } catch (err) {
       lastError = err;

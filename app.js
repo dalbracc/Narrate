@@ -413,7 +413,7 @@ function onWorkerMessage(e) {
       break;
     case 'ready':
       if (gen) { gen.loading = false; gen.device = m.device; renderGen(); }
-      engineNote(m.device);
+      engineNote(m);
       break;
     case 'note':
       console.info(m.message);
@@ -528,11 +528,11 @@ function setSettingsStatus(msg, isError = false) {
   e.style.color = isError ? '' : 'var(--muted)';
 }
 
-function engineNote(device) {
+function engineNote({ device, threads = 1 } = {}) {
   if (!device) return;
   $('engine-note').textContent = device === 'webgpu'
     ? 'Running on the graphics card on this device.'
-    : 'Running on the processor on this device.';
+    : `Running on the processor on this device, using ${threads} ${threads === 1 ? 'thread' : 'threads'}.`;
 }
 
 function previewVoice() {
@@ -1134,6 +1134,15 @@ function wire() {
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
   navigator.serviceWorker.register('sw.js').catch((e) => console.warn('service worker', e));
+  // On computers the service worker adds headers that let the voice use several processor
+  // threads. They only take effect on a fresh load, so reload once when a new worker takes over.
+  if (isIOS) return;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (window.crossOriginIsolated || gen || !audio.paused) return;
+    let tried = false;
+    try { tried = sessionStorage.getItem('narrate.isolate') === '1'; sessionStorage.setItem('narrate.isolate', '1'); } catch { /* ignore */ }
+    if (!tried) location.reload();
+  });
 }
 
 async function init() {
