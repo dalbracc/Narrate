@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Narrate</title>
+<meta name="theme-color" content="#0f1b1a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eceee9" media="(prefers-color-scheme: light)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<style>
+  :root {
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+
+    --bg: #eceee9;
+    --surface: #f7f8f4;
+    --surface-2: #e2e6e0;
+    --ink: #17201f;
+    --muted: #5b6662;
+    --line: #c9d0ca;
+    --gilt: #85661b;
+    --gilt-on-cloth: #e4c878;
+    --danger: #9c2f2f;
+    --focus: #2c6a64;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1b1a;
+      --surface: #162524;
+      --surface-2: #1d2f2d;
+      --ink: #e5ebe6;
+      --muted: #93a29d;
+      --line: #2a3c3a;
+      --gilt: #d3b263;
+      --danger: #e07a6e;
+      --focus: #8ccfc7;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1b1a; --surface: #162524; --surface-2: #1d2f2d; --ink: #e5ebe6; --muted: #93a29d;
+    --line: #2a3c3a; --gilt: #d3b263; --danger: #e07a6e; --focus: #8ccfc7; color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.45 var(--sans);
+    min-height: 100dvh;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+  [hidden] { display: none !important; }
+
+  .wrap { max-width: 600px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 44px; padding: 0 18px; border-radius: 22px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    font-weight: 600; font-size: 15px;
+  }
+  .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--muted); padding: 0 10px; }
+  .btn.danger { color: var(--danger); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .icon-btn {
+    width: 48px; height: 48px; border-radius: 50%; border: 0; background: transparent;
+    display: inline-grid; place-items: center; color: var(--ink);
+  }
+  .icon-btn svg { width: 26px; height: 26px; }
+
+  /* ---------- library ---------- */
+  .top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 0 8px;
+  }
+  .wordmark { font: 600 30px/1 var(--serif); letter-spacing: .01em; margin: 0; }
+  .shelf-note { color: var(--muted); font-size: 14px; margin: 4px 0 22px; }
+
+  /* Books lie in a stack, spine out. Width varies a little per book so the stack looks real. */
+  .stack { list-style: none; margin: 0; padding: 0 0 40px; display: flex; flex-direction: column; gap: 5px; }
+  .spine {
+    position: relative; display: block; width: var(--w, 100%); margin-left: var(--x, 0);
+    min-height: 74px; padding: 13px 18px 16px;
+    border: 0; border-radius: 3px 5px 5px 3px; text-align: left;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,.07), transparent 9%, transparent 91%, rgba(0,0,0,.18)),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px),
+      var(--cloth, #2e4f4a);
+    color: var(--gilt-on-cloth);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.25), 0 1px 0 rgba(0,0,0,.3);
+  }
+  .spine::before, .spine::after {
+    content: ""; position: absolute; left: 18px; right: 18px; height: 1px;
+    background: currentColor; opacity: .45;
+  }
+  .spine::before { top: 6px; }
+  .spine::after { bottom: 6px; }
+  .spine-title { display: block; font: 600 19px/1.2 var(--serif); letter-spacing: .02em; overflow-wrap: anywhere; }
+  .spine-meta { display: block; margin-top: 4px; font-size: 13px; opacity: .8; color: #efe4c4; }
+  .spine-bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--gilt-on-cloth); opacity: .8; border-radius: 0 2px 0 0; }
+
+  .empty {
+    border: 1px dashed var(--line); border-radius: 10px; padding: 28px 22px; text-align: center; color: var(--muted);
+  }
+  .empty p { margin: 0 0 16px; }
+  .empty .lead { font: 500 20px/1.35 var(--serif); color: var(--ink); margin-bottom: 8px; }
+
+  .banner {
+    margin: 10px 0 0; padding: 12px 14px; border-radius: 10px;
+    background: var(--surface-2); font-size: 14px; color: var(--ink);
+  }
+  .banner strong { display: block; margin-bottom: 2px; }
+
+  .footer { color: var(--muted); font-size: 13px; padding: 8px 0 32px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+  /* ---------- sheets ---------- */
+  .view-head { display: flex; align-items: center; gap: 4px; padding: 10px 0 6px; margin-left: -10px; }
+  .view-title { font: 600 24px/1.2 var(--serif); margin: 8px 0 18px; }
+  .field { display: block; margin-bottom: 18px; }
+  .field > span { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .field small { display: block; color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .input, textarea, select {
+    width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--surface);
+  }
+  textarea { min-height: 190px; resize: vertical; font: 16px/1.5 var(--serif); }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 12px; padding: 3px; background: var(--surface); margin-bottom: 18px; }
+  .seg button { flex: 1; min-height: 38px; border: 0; border-radius: 9px; background: transparent; font-weight: 600; font-size: 15px; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); }
+  .drop {
+    display: grid; place-items: center; text-align: center; gap: 6px;
+    min-height: 150px; border: 1px dashed var(--line); border-radius: 12px; padding: 20px;
+    background: var(--surface); color: var(--muted);
+  }
+  .drop strong { color: var(--ink); font-weight: 600; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .row > * { flex: 1; }
+  .row > .btn { flex: 0 0 auto; }
+
+  .chapters { list-style: none; margin: 0 0 8px; padding: 0; border-top: 1px solid var(--line); }
+  .chapters li { border-bottom: 1px solid var(--line); }
+  .chapters label { display: flex; gap: 12px; align-items: center; padding: 11px 2px; }
+  .chapters input { width: 20px; height: 20px; accent-color: var(--ink); flex: none; }
+  .chapters .ct { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chapters .cl { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; flex: none; }
+  .summary { font: 500 17px/1.4 var(--serif); margin: 14px 0 20px; }
+  .error { color: var(--danger); font-size: 14px; margin: 8px 0 0; }
+
+  /* ---------- player ---------- */
+  .player { display: flex; flex-direction: column; min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .player-title { font: 600 26px/1.15 var(--serif); margin: 6px 0 4px; overflow-wrap: anywhere; }
+  .player-sub { color: var(--muted); font-size: 14px; margin: 0; }
+  .gen {
+    margin: 16px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); font-size: 14px;
+  }
+  .gen-line { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .gen-track { height: 4px; background: var(--line); border-radius: 2px; margin: 10px 0 2px; overflow: hidden; }
+  .gen-fill { height: 100%; background: var(--gilt); width: 0; transition: width .4s ease; }
+  .gen p { margin: 6px 0 0; color: var(--muted); }
+
+  .passage {
+    flex: 1; display: flex; flex-direction: column; justify-content: center;
+    padding: 26px 2px; min-height: 220px;
+  }
+  .passage-chapter { color: var(--gilt); font: italic 16px/1.3 var(--serif); margin: 0 0 12px; }
+  .passage-text {
+    font: 400 23px/1.55 var(--serif); margin: 0; max-width: 34em; white-space: pre-line;
+    display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .passage-text.placeholder { color: var(--muted); font-size: 19px; }
+
+  .controls { padding: 8px 0 18px; position: sticky; bottom: 0; background: var(--bg); }
+  .scrub { width: 100%; margin: 0; accent-color: var(--gilt); height: 28px; }
+  .times { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .transport { display: flex; justify-content: center; align-items: center; gap: 22px; margin: 10px 0 14px; }
+  .play {
+    width: 74px; height: 74px; border-radius: 50%; border: 0; background: var(--ink); color: var(--bg);
+    display: grid; place-items: center;
+  }
+  .play svg { width: 32px; height: 32px; }
+  .skip { position: relative; }
+  .skip span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; font-weight: 700; padding-top: 2px; }
+  .tools { display: flex; justify-content: space-between; gap: 6px; }
+  .tool {
+    flex: 1; min-height: 44px; border: 1px solid var(--line); border-radius: 22px; background: var(--surface);
+    font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .tool[aria-pressed="true"] { border-color: var(--gilt); color: var(--gilt); }
+
+  .menu {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; z-index: 10;
+  }
+  .menu-panel {
+    width: 100%; max-width: 600px; margin: 0 auto; background: var(--surface); border-radius: 16px 16px 0 0;
+    padding: 10px 16px calc(16px + env(safe-area-inset-bottom)); max-height: 78dvh; overflow: auto;
+  }
+  .menu-panel h2 { font: 600 19px/1.3 var(--serif); margin: 10px 2px 8px; }
+  .menu-list { list-style: none; margin: 0; padding: 0; }
+  .menu-list button {
+    width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+    min-height: 48px; padding: 10px 4px; border: 0; border-bottom: 1px solid var(--line); background: transparent;
+  }
+  .menu-list button[aria-current="true"] { color: var(--gilt); font-weight: 600; }
+  .menu-list button:disabled { color: var(--muted); }
+  .menu-list .side { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; flex: none; }
+
+  .book-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+  .toast {
+    position: fixed; left: 50%; top: calc(12px + env(safe-area-inset-top)); transform: translateX(-50%);
+    background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px;
+    max-width: calc(100% - 32px); z-index: 20;
+  }
+
+  @media (min-width: 640px) {
+    .passage-text { font-size: 26px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Library -->
+<main id="library" class="wrap">
+  <header class="top">
+    <h1 class="wordmark">Narrate</h1>
+    <button class="btn primary" id="add-btn" type="button">Add a book</button>
+  </header>
+  <div id="standalone-warning" class="banner" hidden>
+    <strong>Audio will stop when the screen locks in this mode.</strong>
+    iPhone pauses home-screen web apps in the background. Open this page in Safari instead, or remove the icon and add it again with "Open as Web App" turned off.
+  </div>
+  <p class="shelf-note" id="shelf-note"></p>
+  <ul class="stack" id="stack"></ul>
+  <div class="empty" id="empty" hidden>
+    <p class="lead">Your shelf is empty.</p>
+    <p>Paste text or import an EPUB, PDF or text file, and it becomes an audiobook you can play with the screen off.</p>
+    <button class="btn primary" type="button" data-action="add">Add a book</button>
+  </div>
+  <footer class="footer">
+    <span id="storage-note"></span>
+    <button class="btn quiet" id="settings-btn" type="button">Voice settings</button>
+  </footer>
+</main>
+
+<!-- Add a book -->
+<section id="add" class="wrap" hidden>
+  <div class="view-head">
+    <button class="btn quiet" type="button" data-action="home">Cancel</button>
+  </div>
+  <h2 class="view-title">Add a book</h2>
+
+  <div class="seg" role="group" aria-label="Source">
+    <button type="button" aria-pressed="true" data-source="file">Import a file</button>
+    <button type="button" aria-pressed="false" data-source="paste">Paste text</button>
+  </div>
+
+  <div id="source-file">
+    <label class="drop" id="drop">
+      <strong>Choose a file</strong>
+      <span>EPUB, PDF, TXT, Markdown or HTML. You can also import an MP3 exported from Narrate on another device.</span>
+      <input id="file-input" type="file" accept=".epub,.pdf,.txt,.md,.markdown,.html,.htm,.mp3,audio/mpeg,application/epub+zip,application/pdf,text/plain" hidden>
+    </label>
+  </div>
+
+  <div id="source-paste" hidden>
+    <label class="field">
+      <span>Text</span>
+      <textarea id="paste-text" placeholder="Paste a chapter, an article or a whole book."></textarea>
+      <small>Lines like "Chapter 3" or "Prologue" become chapters.</small>
+    </label>
+    <button class="btn" type="button" id="paste-go">Use this text</button>
+  </div>
+
+  <p class="error" id="add-error" role="alert" hidden></p>
+
+  <div id="review" hidden>
+    <label class="field">
+      <span>Title</span>
+      <input class="input" id="book-title" autocomplete="off">
+    </label>
+    <label class="field">
+      <span>Author</span>
+      <input class="input" id="book-author" autocomplete="off">
+    </label>
+
+    <div class="field">
+      <span>Chapters to read</span>
+      <ul class="chapters" id="chapter-list"></ul>
+      <small>Uncheck front matter, notes or an index you don't want read.</small>
+    </div>
+    <label class="field row" style="align-items:center">
+      <span style="margin:0;flex:1;font-weight:600;font-size:15px">Read chapter titles aloud</span>
+      <input type="checkbox" id="read-titles" checked style="flex:0 0 22px;width:22px;height:22px;accent-color:var(--ink)">
+    </label>
+
+    <p class="summary" id="add-summary"></p>
+    <button class="btn primary" type="button" id="create-btn" style="width:100%">Create audiobook</button>
+    <p class="shelf-note" style="margin-top:12px">The voice runs on this device. A laptop in Chrome is much faster than a phone; you can generate there, export the MP3 and import it on your iPhone.</p>
+  </div>
+</section>
+
+<!-- Player -->
+<section id="player" class="wrap player" hidden>
+  <div class="view-head">
+    <button class="btn quiet" type="button" data-action="home">Library</button>
+  </div>
+  <h2 class="player-title" id="p-title"></h2>
+  <p class="player-sub" id="p-sub"></p>
+
+  <div class="gen" id="gen" hidden>
+    <div class="gen-line">
+      <span id="gen-status"></span>
+      <button class="btn" type="button" id="gen-toggle" style="min-height:36px;padding:0 14px"></button>
+    </div>
+    <div class="gen-track"><div class="gen-fill" id="gen-fill"></div></div>
+    <p id="gen-note"></p>
+  </div>
+
+  <div class="passage" aria-live="off">
+    <p class="passage-chapter" id="p-chapter"></p>
+    <p class="passage-text" id="p-text"></p>
+  </div>
+
+  <div class="controls">
+    <input class="scrub" id="scrub" type="range" min="0" max="1" step="0.1" value="0" aria-label="Position">
+    <div class="times"><span id="t-cur">0:00</span><span id="t-left">0:00</span></div>
+    <div class="transport">
+      <button class="icon-btn skip" type="button" id="back15" aria-label="Back 15 seconds">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 3.5v4h4"/></svg><span>15</span>
+      </button>
+      <button class="play" type="button" id="play" aria-label="Play">
+        <svg id="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>
+        <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" hidden><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></svg>
+      </button>
+      <button class="icon-btn skip" type="button" id="fwd30" aria-label="Forward 30 seconds">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.5v4h-4"/></svg><span>30</span>
+      </button>
+    </div>
+    <div class="tools">
+      <button class="tool" type="button" id="speed-btn" aria-label="Playback speed">1×</button>
+      <button class="tool" type="button" id="chapters-btn">Chapters</button>
+      <button class="tool" type="button" id="sleep-btn" aria-pressed="false">Sleep</button>
+      <button class="tool" type="button" id="more-btn" aria-label="More">More</button>
+    </div>
+  </div>
+</section>
+
+<!-- Bottom sheet menu -->
+<div class="menu" id="menu" hidden>
+  <div class="menu-panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+    <h2 id="menu-title"></h2>
+    <div id="menu-body"></div>
+    <button class="btn" type="button" data-action="close-menu" style="width:100%;margin-top:14px">Close</button>
+  </div>
+</div>
+
+<!-- Settings -->
+<section id="settings" class="wrap" hidden>
+  <div class="view-head">
+    <button class="btn quiet" type="button" data-action="home">Done</button>
+  </div>
+  <h2 class="view-title">Voice settings</h2>
+  <label class="field">
+    <span>Voice for new books</span>
+    <div class="row">
+      <select id="voice"></select>
+      <button class="btn" type="button" id="preview-btn">Listen</button>
+    </div>
+    <small>Voices higher on the list have more training and sound more natural. The first listen downloads the voice model (about 90 MB on a phone, 330 MB on a laptop) once.</small>
+  </label>
+  <label class="field">
+    <span>Reading pace</span>
+    <select id="pace">
+      <option value="0.9">Unhurried</option>
+      <option value="1">Natural</option>
+      <option value="1.1">Brisk</option>
+    </select>
+    <small>Baked into the audio. You can still change playback speed while listening.</small>
+  </label>
+  <label class="field">
+    <span>Audio quality</span>
+    <select id="kbps">
+      <option value="48">Standard, about 22 MB per hour</option>
+      <option value="64">Higher, about 29 MB per hour</option>
+    </select>
+  </label>
+  <label class="field">
+    <span>Engine</span>
+    <select id="engine">
+      <option value="auto">Automatic</option>
+      <option value="gpu">Graphics card (fast on laptops)</option>
+      <option value="cpu">Processor only (most compatible)</option>
+    </select>
+    <small id="engine-note">Automatic uses the graphics card on computers and the processor on phones.</small>
+  </label>
+  <p class="error" id="settings-error" role="alert" hidden></p>
+</section>
+
+<audio id="audio" preload="auto"></audio>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
