@@ -53,8 +53,11 @@ async function load(mode = 'auto') {
           }
         },
       });
-      // A one-word warm-up catches GPU backends that load but can't run.
-      await tts.generate('Ready.', { voice: 'af_heart' });
+      // Warm up with a short sentence. Some GPUs run the model without errors but return noise,
+      // so check that the output actually looks like speech before trusting this backend.
+      const test = await tts.generate('Testing, one, two, three.', { voice: 'af_heart' });
+      const problem = speechProblem(test.audio, test.sampling_rate);
+      if (problem) throw new Error(`output was ${problem}, not speech`);
       loadedWith = JSON.stringify(opt);
       post({ type: 'ready', ...opt });
       return;
@@ -65,6 +68,30 @@ async function load(mode = 'auto') {
     }
   }
   throw lastError || new Error('Could not load the voice model.');
+}
+
+/** Returns a short description if the audio doesn't look like speech, or '' if it does. */
+function speechProblem(samples, rate) {
+  if (!samples || !samples.length) return 'empty';
+  let sumSq = 0;
+  let peak = 0;
+  let crossings = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i];
+    if (!Number.isFinite(s)) return 'invalid';
+    sumSq += s * s;
+    const a = Math.abs(s);
+    if (a > peak) peak = a;
+    if (i && (s >= 0) !== (samples[i - 1] >= 0)) crossings++;
+  }
+  const rms = Math.sqrt(sumSq / samples.length);
+  const zcr = crossings / samples.length; // speech at 24 kHz sits well under 0.25; hiss is near 0.5
+  const seconds = samples.length / rate;
+  if (peak < 0.01 || rms < 0.003) return 'silence';
+  if (zcr > 0.3) return 'noise';
+  if (rms > 0.5 || peak > 20) return 'distorted';
+  if (seconds < 0.5 || seconds > 8) return `the wrong length (${seconds.toFixed(1)}s)`;
+  return '';
 }
 
 async function synth(text, voice, speed) {

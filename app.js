@@ -417,7 +417,7 @@ function onWorkerMessage(e) {
       break;
     case 'note':
       console.info(m.message);
-      if (gen) { gen.note = m.message; renderGen(); }
+      if (gen) { gen.note = m.message; renderGen(); } else setSettingsStatus(m.message);
       break;
     case 'chunk': {
       const st = states.get(m.bookId);
