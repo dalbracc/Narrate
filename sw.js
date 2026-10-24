@@ -5,7 +5,7 @@
 // can't set headers, and isolation is what lets the voice model use several processor threads.
 // "credentialless" keeps CDN and model downloads working without them opting in. iPhones are
 // left alone: Safari doesn't support it, and the phone path is tuned for low memory.
-const SHELL = 'narrate-shell-v2';
+const SHELL = 'narrate-shell-v3';
 const LIBS = 'narrate-libs-v1';
 const SHELL_FILES = [
   './', 'index.html', 'app.js', 'worker.js', 'textproc.js', 'importers.js', 'audio.js',
@@ -45,7 +45,11 @@ self.addEventListener('fetch', (e) => {
   if (url.origin === self.location.origin) {
     e.respondWith((async () => {
       try {
-        const res = await fetch(req);
+        // Always revalidate with the server so updates show up on the next load instead of after
+        // GitHub Pages' 10-minute browser cache. Unchanged files come back as a cheap 304.
+        const res = req.mode === 'navigate'
+          ? await fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
+          : await fetch(req, { cache: 'no-cache' });
         if (res.ok) (await caches.open(SHELL)).put(req, res.clone());
         return isolate(res);
       } catch {
