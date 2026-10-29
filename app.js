@@ -322,21 +322,8 @@ function selectedChapters() {
   return [...$('chapter-list').querySelectorAll('input:checked')].map((c) => parsed.chapters[+c.dataset.i]);
 }
 
-/** Chunks for the chosen chapters, plus the opening and closing lines a recorded audiobook has. */
 function assemble() {
-  const { chunks, chapters } = buildChunks(selectedChapters(), { readTitles: $('read-titles').checked });
-  if (chunks.length && $('credits').checked) {
-    const title = $('book-title').value.trim();
-    const author = $('book-author').value.trim();
-    const end = (s) => (/[.!?…]$/.test(s) ? s : `${s}.`);
-    const opening = [title && end(title), author && end(`Written by ${author}`)].filter(Boolean).join(' ');
-    if (opening) {
-      chunks.unshift({ t: opening, p: 'c', ch: 0 });
-      chapters.forEach((c, i) => { if (i > 0) c.start += 1; });
-    }
-    chunks.push({ t: 'The end.', p: 'c', ch: chunks[chunks.length - 1].ch });
-  }
-  return { chunks, chapters };
+  return buildChunks(selectedChapters(), { readTitles: $('read-titles').checked });
 }
 
 function updateSummary() {
@@ -1127,9 +1114,6 @@ function wire() {
   $('file-input').onchange = (e) => onFilesChosen(e.target.files);
   $('paste-go').onclick = onPaste;
   $('read-titles').onchange = updateSummary;
-  $('credits').onchange = updateSummary;
-  $('book-title').addEventListener('input', updateSummary);
-  $('book-author').addEventListener('input', updateSummary);
   $('create-btn').onclick = () => { $('create-btn').disabled = true; createBook().finally(() => { $('create-btn').disabled = false; }); };
 
   const drop = $('drop');
