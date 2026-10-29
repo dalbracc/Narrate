@@ -340,9 +340,9 @@
 
   <div id="source-file">
     <label class="drop" id="drop">
-      <strong>Choose a file</strong>
-      <span>EPUB, PDF, TXT, Markdown or HTML. You can also import an MP3 exported from Narrate on another device.</span>
-      <input id="file-input" type="file" accept=".epub,.pdf,.txt,.md,.markdown,.html,.htm,.mp3,audio/mpeg,application/epub+zip,application/pdf,text/plain" hidden>
+      <strong>Choose files</strong>
+      <span>EPUB, PDF, TXT, Markdown or HTML. Pick several to join them into one book, read in filename order. MP3s exported from Narrate each come in as their own book.</span>
+      <input id="file-input" type="file" multiple accept=".epub,.pdf,.txt,.md,.markdown,.html,.htm,.mp3,audio/mpeg,application/epub+zip,application/pdf,text/plain" hidden>
     </label>
   </div>
 
@@ -375,6 +375,10 @@
     <label class="field row" style="align-items:center">
       <span style="margin:0;flex:1;font-weight:600;font-size:15px">Read chapter titles aloud</span>
       <input type="checkbox" id="read-titles" checked style="flex:0 0 22px;width:22px;height:22px;accent-color:var(--ink)">
+    </label>
+    <label class="field row" style="align-items:center">
+      <span style="margin:0;flex:1;font-weight:600;font-size:15px">Open with the title and author, close with "The end"</span>
+      <input type="checkbox" id="credits" checked style="flex:0 0 22px;width:22px;height:22px;accent-color:var(--ink)">
     </label>
 
     <p class="summary" id="add-summary"></p>

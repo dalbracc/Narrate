@@ -65,6 +65,7 @@ export function extractBlocks(root) {
     for (const child of Array.from(el.childNodes || [])) {
       if (child.nodeType !== 1) continue;
       const tag = tagOf(child);
+      if (tag === 'hr') { out.push({ tag, text: '* * *' }); continue; }
       if (SKIP_TAGS.has(tag)) continue;
       if (BLOCK_TAGS.has(tag)) {
         const hasBlockChild = Array.from(child.children || []).some((c) => BLOCK_TAGS.has(tagOf(c)));

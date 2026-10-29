@@ -11,6 +11,11 @@ const ABBR_SET = new Set(ABBREVIATIONS.map((a) => a.toLowerCase()));
 
 const CHAPTER_RE = /^(?:(?:chapter|book|part)\s+(?:[0-9]+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty[\w-]*|thirty[\w-]*|forty[\w-]*|fifty[\w-]*)\b.*|prologue|epilogue|introduction|preface|foreword|afterword|acknowledg(?:e)?ments|interlude)$/i;
 
+// Scene breaks ("* * *", "#", "⁂", "~~~") become this marker so they turn into a long pause.
+export const SCENE_BREAK = '⁂';
+const SCENE_BREAK_RE = /^\s*(?:[*•·~#⁂✱✦✧◆◇❖§=_\-–—]\s*){1,9}$/;
+export function isSceneBreak(line) { return SCENE_BREAK_RE.test(line) && !/^\s*[-–—]\s*$/.test(line); }
+
 /** Normalise raw text: line endings, hyphenated line breaks, soft wraps, stray page numbers. */
 export function cleanText(raw) {
   let t = String(raw || '')
@@ -37,8 +42,9 @@ export function cleanText(raw) {
       const out = [];
       let buf = [];
       for (const line of lines) {
-        if (isHeading(line) && buf.length === 0) out.push(line);
-        else if (isHeading(line)) { out.push(buf.join(' ')); buf = []; out.push(line); }
+        const own = isHeading(line) || isSceneBreak(line);
+        if (own && buf.length === 0) out.push(line);
+        else if (own) { out.push(buf.join(' ')); buf = []; out.push(line); }
         else buf.push(line);
       }
       if (buf.length) out.push(buf.join(' '));
@@ -48,10 +54,18 @@ export function cleanText(raw) {
     paragraphs = t.split('\n');
   }
 
-  return paragraphs
-    .map((p) => normaliseSpacing(p))
-    .filter((p) => p && /[\p{L}\p{N}]/u.test(p))
-    .join('\n\n');
+  const out = [];
+  for (const raw of paragraphs) {
+    if (isSceneBreak(raw)) {
+      // Keep one marker between real paragraphs; drop leading or doubled ones.
+      if (out.length && out[out.length - 1] !== SCENE_BREAK) out.push(SCENE_BREAK);
+      continue;
+    }
+    const p = normaliseSpacing(raw);
+    if (p && /[\p{L}\p{N}]/u.test(p)) out.push(p);
+  }
+  if (out[out.length - 1] === SCENE_BREAK) out.pop();
+  return out.join('\n\n');
 }
 
 function normaliseSpacing(p) {
@@ -143,7 +157,7 @@ function splitLong(sentence, maxChars) {
 
 // Silence appended after each chunk, in seconds. This is most of what makes the reading feel paced
 // like a narrator: short breath between sentence groups, longer beat at paragraphs and chapters.
-export const PAUSES = { s: 0.18, p: 0.55, h: 0.9, c: 1.6 };
+export const PAUSES = { s: 0.18, p: 0.55, h: 0.9, b: 1.5, c: 1.6 };
 
 /**
  * Turn chapters into narration chunks.
@@ -158,7 +172,15 @@ export function buildChunks(chapters, { maxChars = 280, readTitles = true } = {}
     if (readTitles && chapter.title && !chapter.implicit) {
       chunks.push({ t: chapter.title.endsWith('.') ? chapter.title : chapter.title + '.', p: 'h', ch: ci });
     }
+    let lastText = chapter.paragraphs.length - 1;
+    while (lastText >= 0 && chapter.paragraphs[lastText] === SCENE_BREAK) lastText--;
     chapter.paragraphs.forEach((para, pi) => {
+      if (para === SCENE_BREAK) {
+        // Lengthen the pause after the passage before the break.
+        const prev = chunks[chunks.length - 1];
+        if (prev && prev.ch === ci && prev.p !== 'c' && prev.p !== 'h') prev.p = 'b';
+        return;
+      }
       const sentences = splitSentences(para).flatMap((s) => splitLong(s, maxChars));
       let group = '';
       const flush = (pause) => {
@@ -169,7 +191,7 @@ export function buildChunks(chapters, { maxChars = 280, readTitles = true } = {}
         if (group && group.length + 1 + s.length > maxChars) flush('s');
         group = group ? group + ' ' + s : s;
       }
-      const lastInChapter = pi === chapter.paragraphs.length - 1;
+      const lastInChapter = pi >= lastText;
       flush(lastInChapter ? 'c' : 'p');
     });
   });

@@ -208,21 +208,83 @@ function setSource(src) {
   $('source-paste').hidden = src !== 'paste';
 }
 
-async function onFileChosen(file) {
+const isAudioFile = (f) => /\.mp3$/i.test(f.name) || f.type === 'audio/mpeg';
+const naturalOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const baseName = (f) => f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Several text files become one book, read in filename order ("Part 2" before "Part 10"). */
+async function onFilesChosen(fileList) {
   addError('');
-  if (!file) return;
-  if (/\.mp3$/i.test(file.name) || file.type === 'audio/mpeg') { await importAudio(file); return; }
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+
+  // Exported MP3s are already books: each one goes straight onto the shelf.
+  const audioFiles = files.filter(isAudioFile);
+  const textFiles = files.filter((f) => !isAudioFile(f)).sort((a, b) => naturalOrder.compare(a.name, b.name));
+  for (const [k, f] of audioFiles.entries()) {
+    await importAudio(f, { open: !textFiles.length && k === audioFiles.length - 1 });
+  }
+  if (!textFiles.length) return;
+
   const drop = $('drop').querySelector('strong');
   const label = drop.textContent;
-  drop.textContent = `Reading ${file.name}…`;
+  const results = [];
+  const failed = [];
   try {
-    showReview(await importFile(file));
-  } catch (err) {
-    console.error(err);
-    addError(`Couldn't read that file. ${err?.message || ''}`.trim());
+    for (const [k, file] of textFiles.entries()) {
+      drop.textContent = textFiles.length > 1 ? `Reading ${k + 1} of ${textFiles.length}: ${file.name}…` : `Reading ${file.name}…`;
+      try {
+        results.push({ file, book: await importFile(file) });
+      } catch (err) {
+        console.error(file.name, err);
+        failed.push(`${file.name} (${err?.message || 'unreadable'})`);
+      }
+    }
   } finally {
     drop.textContent = label;
   }
+  if (!results.length) {
+    addError(`Couldn't read ${textFiles.length > 1 ? 'any of those files' : 'that file'}. ${failed.join('; ')}`.trim());
+    return;
+  }
+  showReview(results.length === 1 ? results[0].book : combineBooks(results));
+  if (failed.length) addError(`Skipped ${failed.length === 1 ? 'a file' : `${failed.length} files`} it couldn't read: ${failed.join('; ')}`);
+}
+
+function combineBooks(results) {
+  const titles = results.map((r) => (r.book.title || '').trim());
+  const distinctTitles = new Set(titles.map((t) => t.toLowerCase())).size === titles.length;
+  const chapters = [];
+  for (const { file, book } of results) {
+    for (const ch of book.chapters) {
+      // A file with no chapter headings is one chapter, named after the file (or its own title,
+      // when every file has a different one). Implicit titles are shown but not read aloud.
+      if (ch.implicit) {
+        const own = book.title && book.title !== baseName(file) && distinctTitles ? book.title : baseName(file);
+        chapters.push({ ...ch, title: own });
+      } else {
+        chapters.push(ch);
+      }
+    }
+  }
+  const same = titles.every((t) => t && t.toLowerCase() === titles[0].toLowerCase());
+  const nameStem = commonPrefix(results.map((r) => baseName(r.file)))
+    .replace(/(?:\b(?:part|chapter|ch|vol|volume|book|section|pt)\.?)?[\s\-–—_.,:#(]*\d*$/i, '')
+    .replace(/[\s\-–—_.,:#(]+$/, '').trim();
+  const title = same ? titles[0] : nameStem.length >= 3 ? nameStem : titles[0] || baseName(results[0].file);
+  const author = results.map((r) => r.book.author).find(Boolean) || '';
+  return { title, author, chapters };
+}
+
+function commonPrefix(names) {
+  if (!names.length) return '';
+  let p = names[0];
+  for (const n of names.slice(1)) {
+    let i = 0;
+    while (i < p.length && i < n.length && p[i].toLowerCase() === n[i].toLowerCase()) i++;
+    p = p.slice(0, i);
+  }
+  return p;
 }
 
 function onPaste() {
@@ -260,9 +322,25 @@ function selectedChapters() {
   return [...$('chapter-list').querySelectorAll('input:checked')].map((c) => parsed.chapters[+c.dataset.i]);
 }
 
+/** Chunks for the chosen chapters, plus the opening and closing lines a recorded audiobook has. */
+function assemble() {
+  const { chunks, chapters } = buildChunks(selectedChapters(), { readTitles: $('read-titles').checked });
+  if (chunks.length && $('credits').checked) {
+    const title = $('book-title').value.trim();
+    const author = $('book-author').value.trim();
+    const end = (s) => (/[.!?…]$/.test(s) ? s : `${s}.`);
+    const opening = [title && end(title), author && end(`Written by ${author}`)].filter(Boolean).join(' ');
+    if (opening) {
+      chunks.unshift({ t: opening, p: 'c', ch: 0 });
+      chapters.forEach((c, i) => { if (i > 0) c.start += 1; });
+    }
+    chunks.push({ t: 'The end.', p: 'c', ch: chunks[chunks.length - 1].ch });
+  }
+  return { chunks, chapters };
+}
+
 function updateSummary() {
-  const chosen = selectedChapters();
-  const { chunks } = buildChunks(chosen, { readTitles: $('read-titles').checked });
+  const { chunks } = assemble();
   const sec = estimateSeconds(chunks) / Number(settings.pace);
   $('create-btn').disabled = !chunks.length;
   $('add-summary').textContent = chunks.length
@@ -271,8 +349,7 @@ function updateSummary() {
 }
 
 async function createBook() {
-  const chosen = selectedChapters();
-  const { chunks, chapters } = buildChunks(chosen, { readTitles: $('read-titles').checked });
+  const { chunks, chapters } = assemble();
   if (!chunks.length) return;
   const id = crypto.randomUUID();
   const book = {
@@ -299,7 +376,7 @@ async function createBook() {
   startGeneration(book);
 }
 
-async function importAudio(file) {
+async function importAudio(file, { open = true } = {}) {
   try {
     const head = new Uint8Array(await file.slice(0, 10).arrayBuffer());
     let tagSize = 0;
@@ -331,12 +408,11 @@ async function importAudio(file) {
     books.set(id, book);
     states.set(id, st);
     try { await navigator.storage?.persist?.(); } catch { /* optional */ }
-    resetAdd();
-    toast(chunks.length ? 'Imported with chapters and text.' : 'Imported.');
-    await openBook(id);
+    toast(chunks.length ? `Imported "${book.title}" with chapters and text.` : `Imported "${book.title}".`);
+    if (open) { resetAdd(); await openBook(id); }
   } catch (err) {
     console.error(err);
-    addError(`Couldn't import that audio file. ${err?.message || ''}`);
+    addError(`Couldn't import ${file.name}. ${err?.message || ''}`);
   }
 }
 
@@ -828,16 +904,32 @@ function onChunkSaved(bookId) {
     } else if (cur.loadedDone === 0 && st.done > 0) {
       // First audio for this book: make it playable right away.
       cur.loading = true;
-      loadIntoPlayer(cur.book, 0, false).then(() => { if (!$('player').hidden) renderPlayer(); });
+      cur.lastRefresh = Date.now();
+      loadIntoPlayer(cur.book, 0, false).then(() => afterRefresh(bookId));
     } else if (cur.stalled) {
       cur.stalled = false;
       cur.loading = true;
       extendIfPossible(true);
+    } else if (audio.paused && st.done > cur.loadedDone
+      && (st.done >= cur.book.total || Date.now() - (cur.lastRefresh || 0) > 10000)) {
+      // While paused, pull in newly generated passages every so often (and once at the end) so the
+      // timeline, time remaining and chapter list cover everything generated so far.
+      cur.loading = true;
+      cur.lastRefresh = Date.now();
+      loadIntoPlayer(cur.book, currentTime(), false).then(() => afterRefresh(bookId));
     }
     updateTimes();
     renderGen();
   }
   renderLibrarySoon();
+}
+
+function afterRefresh(bookId) {
+  if (cur?.book.id !== bookId) return;
+  if (!$('player').hidden) renderPlayer();
+  const st = states.get(bookId);
+  // Generation may have finished while this reload was in flight.
+  if (st && st.done >= cur.book.total && st.done > cur.loadedDone) onChunkSaved(bookId);
 }
 
 function clearSleep() {
@@ -1032,14 +1124,17 @@ function wire() {
   $('add-btn').onclick = () => { resetAdd(); show('add'); };
   $('settings-btn').onclick = () => { renderSettings(); show('settings'); };
   for (const b of document.querySelectorAll('[data-source]')) b.onclick = () => setSource(b.dataset.source);
-  $('file-input').onchange = (e) => onFileChosen(e.target.files[0]);
+  $('file-input').onchange = (e) => onFilesChosen(e.target.files);
   $('paste-go').onclick = onPaste;
   $('read-titles').onchange = updateSummary;
+  $('credits').onchange = updateSummary;
+  $('book-title').addEventListener('input', updateSummary);
+  $('book-author').addEventListener('input', updateSummary);
   $('create-btn').onclick = () => { $('create-btn').disabled = true; createBook().finally(() => { $('create-btn').disabled = false; }); };
 
   const drop = $('drop');
   drop.addEventListener('dragover', (e) => { e.preventDefault(); });
-  drop.addEventListener('drop', (e) => { e.preventDefault(); onFileChosen(e.dataTransfer.files[0]); });
+  drop.addEventListener('drop', (e) => { e.preventDefault(); onFilesChosen(e.dataTransfer.files); });
 
   $('voice').onchange = (e) => { settings.voice = e.target.value; saveSettings(); };
   $('pace').onchange = (e) => { settings.pace = e.target.value; saveSettings(); };
